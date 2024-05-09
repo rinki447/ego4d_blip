@@ -114,10 +114,12 @@ class BLIP_Ego4d(nn.Module):
         #Rinki########################################## make prediction classes from scores of noun and verbs
         noun_probs = torch.softmax(noun_cls_logits, dim=1)
         predicted_noun_class = torch.argmax(noun_probs, dim=1)
+        predicted_noun_class=predicted_noun_class.numpy()
+
 
         verb_probs = torch.softmax(verb_cls_logits, dim=1)
         predicted_verb_class = torch.argmax(verb_probs, dim=1)
-
+        predicted_verb_class=predicted_verb_class.numpy()
         #print(predicted_noun_class)
         
         prediction = {'predicted_verb_classes': predicted_noun_class,

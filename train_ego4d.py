@@ -28,8 +28,23 @@ from utils import cosine_lr_schedule
 from data import create_dataset, create_sampler, create_loader
 
 
-def train(model, data_loader, optimizer, epoch, device, config):
+def accuracy(predictions,noun_labels,verb_labels):
+    same_verb=np.where(predictions['predicted_verb_classes']==noun_labels)
+    same_noun=np.where(predictions['predicted_noun_classes']==verb_labels)
+    verb_hit=len(same_verb[0])
+    noun_hit=len(same_noun[0])
+    total_video=len(noun_labels)
+    verb_acc=verb_hit/total_video
+    noun_acc=noun_hit/total_video
+
+    both_hit=np.where(same_verb[0]==same_noun[0])[0]
+    total_acc=len(both_hit)/total_video
+    return noun_acc,verb_acc,total_acc
+
+
+def train(model, data_loader_train, optimizer, epoch, device, config):
     # train
+    
     model.train()  
     
     metric_logger = utils.MetricLogger(delimiter="  ")
@@ -39,9 +54,11 @@ def train(model, data_loader, optimizer, epoch, device, config):
     header = 'Train Epoch: [{}]'.format(epoch)
     print_freq = 50
 
-    for i,(caption, vid_id) in enumerate(metric_logger.log_every(data_loader, print_freq, header)): #Rinki loader must have everything needed for model
+
+
+    for i,(caption, vid_id,noun_labels,verb_labels) in enumerate(metric_logger.log_every(data_loader_train, print_freq, header)): #Rinki loader must have everything needed for model
         
-        _, loss_noun, loss_verb = model()#Rinki: input to your blip_ego model#                
+        _, loss_noun, loss_verb = model(caption, noun_labels, verb_labels,device,vid_feature=None)#Rinki: input to your blip_pretrain_ego model#                
         loss = loss_noun + loss_verb
         
         optimizer.zero_grad()
@@ -59,7 +76,7 @@ def train(model, data_loader, optimizer, epoch, device, config):
 
 
 @torch.no_grad()
-def evaluation(model, data_loader, device, config):
+def evaluation(model, data_loader_test, device, config):
     # test
     model.eval() 
     
@@ -69,13 +86,20 @@ def evaluation(model, data_loader, device, config):
 
     result = []
     
-    
+    n_acc=0
+    v_acc=0
+    t_acc=0
     start_time = time.time()  
-    for i,(caption, vid_id) in enumerate(metric_logger.log_every(data_loader, print_freq, header)): 
-        predictions, _, _ = model()#Rinki: input to your blip_ego model#      predictions should be np array
+    for i,(caption, vid_id,noun_labels,verb_labels) in enumerate(metric_logger.log_every(data_loader_test, print_freq, header)): 
+        predictions, _, _ = model(caption, noun_labels, verb_labels,device,vid_feature=None)#Rinki: input to your blip_ego model#      predictions should be np array
         
-        #Rinki you know the predictions dictionary , so calculated noun, verb, action accuracy  
-  
+        #Rinki you know the predictions dictionary , so calculated noun, verb, action accuracy 
+        noun_acc,verb_acc,total_acc=accuracy(predictions,noun_labels,verb_labels)
+        n_acc=n_acc+noun_acc
+        v_acc=v_acc+verb_acc
+        t_acc=t_acc+total_acc
+        
+         
 
     if args.distributed:
         dist.barrier()   
@@ -86,7 +110,7 @@ def evaluation(model, data_loader, device, config):
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print('Evaluation time {}'.format(total_time_str)) 
 
-    return result
+    return result,n_acc,v_acc,t_acc
 
 
   
@@ -122,9 +146,11 @@ def main(args, config):
 
     #### Model #### 
     print("Creating model")
-    model = blip_retrieval(pretrained=config['pretrained'], image_size=config['image_size'], vit=config['vit'], 
-                             vit_grad_ckpt=config['vit_grad_ckpt'], vit_ckpt_layer=config['vit_ckpt_layer'], 
-                             queue_size=config['queue_size'], negative_all_rank=config['negative_all_rank'])
+    #model = blip_retrieval(pretrained=config['pretrained'], image_size=config['image_size'], vit=config['vit'], 
+                             #vit_grad_ckpt=config['vit_grad_ckpt'], vit_ckpt_layer=config['vit_ckpt_layer'], 
+                             #queue_size=config['queue_size'], negative_all_rank=config['negative_all_rank'])
+
+    model = blip_pretrain_ego4d(num_frames=num_frames, verb_classes=verb_classes, noun_classes=noun_classes, vision_width=512, med_config='configs/bert_config.json', embed_dim=256, queue_size=57600, momentum=0.995)
 
     model = model.to(device)   
     
@@ -141,6 +167,9 @@ def main(args, config):
     print("Start training")
     start_time = time.time()    
 
+    noun_epoch_acc=[]
+    verb_epoch_acc=[]
+    total_epoch_acc=[]
     for epoch in range(0, config['max_epoch']):    
         if not args.evaluate:        
             if args.distributed:
@@ -153,6 +182,11 @@ def main(args, config):
         #Rinki evaluate after every 2 epochs 
         # score_val_i2t, score_val_t2i, = evaluation(model_without_ddp, val_loader, device, config)
         # score_test_i2t, score_test_t2i = evaluation(model_without_ddp, test_loader, device, config)
+        if epoch%2==0:
+            _,n_acc,v_acc,t_acc=evaluation(model, test_loader, device, config) 
+            noun_epoch_acc.append(n_acc)
+            verb_epoch_acc.append(v_acc)
+            total_epoch_acc.append(t_acc)
     
         if utils.is_main_process():  
       
