@@ -162,8 +162,11 @@ class BLIP_Ego4d(nn.Module):
         self.queue_ptr[0] = ptr 
 
 
-def blip_pretrain_ego4d(**kwargs):
+def blip_pretrain_ego4d(pretrained='',**kwargs):
     model = BLIP_Ego4d(**kwargs)
+    if pretrained:
+        model,msg = load_checkpoint(model,pretrained)
+        assert(len(msg.missing_keys)==0)
     return model 
 
 
