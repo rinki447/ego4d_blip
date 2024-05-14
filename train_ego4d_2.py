@@ -22,12 +22,13 @@ import torch.backends.cudnn as cudnn
 import torch.distributed as dist
 from torch.utils.data import DataLoader
 
-from models.blip_retrieval import blip_retrieval
+from models.blip_pretrain_ego4d import BLIP_Ego4d
 import utils
 from utils import cosine_lr_schedule
-#from data import create_dataset, create_sampler, create_loader
-from torch.utils.data import DataLoader, Dataset
-from data.dataloader import Ego4dDataset
+from data.ego4d import Ego4dDataset
+from data import create_dataset, create_sampler, create_loader
+from data.utils import collate_fn
+# from torch.utils.data import DataLoader, Dataset
 from utils import compute_acc
 
 
@@ -67,9 +68,9 @@ def train(model, data_loader_train, optimizer, epoch, device, config):
 
 
 
-    for i,(vid_id,caption,verb_labels,noun_labels) in enumerate(metric_logger.log_every(data_loader_train, print_freq, header)): #Rinki loader must have everything needed for model
+    for i,(vid_id,caption,verb_labels,noun_labels) in enumerate(metric_logger.log_every(data_loader_train, print_freq, header)): 
         
-        _, loss_noun, loss_verb = model(caption, noun_labels, verb_labels,device,vid_feature=None)#Rinki: input to your blip_pretrain_ego model#                
+        _, loss_noun, loss_verb = model(caption, noun_labels, verb_labels,device,vid_feature=None)             
         loss = loss_noun + loss_verb
         
         optimizer.zero_grad()
@@ -94,9 +95,13 @@ def evaluation(model, data_loader_test, device, config):
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Action Reco performance:'
     print_freq = 50
-    metric_logger.meters['t_acc'] = AverageMeter()
-    metric_logger.meters['n-acc'] = AverageMeter()
-    metric_logger.meters['v_acc'] = AverageMeter()
+    metric_logger.add_meter('t_acc', utils.SmoothedValue(window_size=1,fmt='{value:.2f}'))
+    metric_logger.add_meter('n_acc', utils.SmoothedValue(window_size=1,fmt='{value:.2f}'))
+    metric_logger.add_meter('v_acc', utils.SmoothedValue(window_size=1,fmt='{value:.2f}'))
+    
+    # metric_logger.meters['t_acc'] = AverageMeter()
+    # metric_logger.meters['n_acc'] = AverageMeter()
+    # metric_logger.meters['v_acc'] = AverageMeter()
 
 
     result = []
@@ -104,25 +109,18 @@ def evaluation(model, data_loader_test, device, config):
     start_time = time.time()  
 
     for i,(vid_ids,caption,verb_labels,noun_labels) in enumerate(metric_logger.log_every(data_loader_test, print_freq, header)): 
-        predictions, _, _ = model(caption,noun_labels,verb_labels,device,vid_feature=None)#Rinki: input to your blip_ego model#      predictions should be np array
+        predictions, _, _ = model(caption,noun_labels,verb_labels,device,vid_feature=None) 
         
-        #Rinki you know the predictions dictionary , so calculated noun, verb, action accuracy 
         noun_acc,verb_acc,total_acc=accuracy(predictions,noun_labels,verb_labels)
         
 
         #metric_logger.meters['acc'].update(accuracy.item(), n=image0.size(0)) # taken from line 87 of train_nlvr.py
       
         metric_logger.meters['t_acc'].update(total_acc.item(), n=vid_ids.shape[0])
-        metric_logger.meters['n-acc'].update(noun_acc.item(), n=vid_ids.shape[0])
+        metric_logger.meters['n_acc'].update(noun_acc.item(), n=vid_ids.shape[0])
         metric_logger.meters['v_acc'].update(verb_acc.item(), n=vid_ids.shape[0])
 
-    metric_logger.synchronize_between_processes()    
-         
-
-    if args.distributed:
-        dist.barrier()   
-        torch.distributed.all_reduce(score_matrix_i2t, op=torch.distributed.ReduceOp.SUM) 
-        torch.distributed.all_reduce(score_matrix_t2i, op=torch.distributed.ReduceOp.SUM)        
+    metric_logger.synchronize_between_processes()           
         
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
@@ -139,11 +137,11 @@ def main(args, config):
     annots_dir_test = "/data/AmitRoyChowdhury/ego4d_data/v2/annotations/fho_lta_test.json"
     llava_captions_path = "/data/AmitRoyChowdhury/Anirudh/llava_object_responses/"
     taxonomy_path = "/data/AmitRoyChowdhury/ego4d_data/v2/annotations/fho_lta_taxonomy.json"
-    train_batch_size=2
-    test_batch_size=2
+    
+    # train_batch_size=2
+    # test_batch_size=2
 
-    train_dataset = Ego4dDataset(annots_dir_train,taxonomy_path,llava_captions_path)
-    test_dataset = Ego4dDataset(annots_dir_test,taxonomy_path,llava_captions_path)
+    
 
     utils.init_distributed_mode(args)    
     
@@ -157,26 +155,29 @@ def main(args, config):
     cudnn.benchmark = True
 
     #### Dataset #### 
-
+   
     
-    print("Creating retrieval dataset")
+    print("Creating action reco dataset")
+    train_dataset = Ego4dDataset(mode='train',annots_dir_train,taxonomy_path,llava_captions_path) #Rinki->should put in config the annot paths
+    test_dataset = Ego4dDataset(mode='test',annots_dir_test,taxonomy_path,llava_captions_path)
+    
     #train_dataset, val_dataset, test_dataset = create_dataset('retrieval_%s'%config['dataset'], config)  
 
-   '''if args.distributed:
+    if args.distributed:
         num_tasks = utils.get_world_size()
         global_rank = utils.get_rank()            
-        samplers = create_sampler([train_dataset], [True], num_tasks, global_rank) + [None, None]
+        samplers = create_sampler([train_dataset, test_dataset], [True,False], num_tasks, global_rank)
     else:
-        samplers = [None, None, None]'''
+        samplers = [None, None, None]
     
-    '''train_loader,test_loader = create_loader([train_dataset, test_dataset],samplers,
-                                                          batch_size=[config['batch_size_train']]+[config['batch_size_test']]*2,
-                                                          num_workers=[4,4,4],
-                                                          is_trains=[True, False, False], 
-                                                          collate_fns=[None,None,None]) '''
+    train_loader,test_loader = create_loader([train_dataset, test_dataset],samplers,
+                                                          batch_size=[config['batch_size_train'],config['batch_size_test']],
+                                                          num_workers=[4,4],
+                                                          is_trains=[True, False], 
+                                                          collate_fns=[collate_fn,collate_fn]) 
 
-    train_loader = DataLoader(train_dataset, batch_size=train_batch_size, shuffle=shuffle)
-    test_loader = DataLoader(test_dataset, batch_size=test_batch_size, shuffle=False)
+    # train_loader = DataLoader(train_dataset, batch_size=train_batch_size, shuffle=shuffle)
+    # test_loader = DataLoader(test_dataset, batch_size=test_batch_size, shuffle=False)
 
    
 
@@ -186,7 +187,11 @@ def main(args, config):
                              #vit_grad_ckpt=config['vit_grad_ckpt'], vit_ckpt_layer=config['vit_ckpt_layer'], 
                              #queue_size=config['queue_size'], negative_all_rank=config['negative_all_rank'])
 
-    model = blip_pretrain_ego4d(num_frames=num_frames, verb_classes=verb_classes, noun_classes=noun_classes, vision_width=512, med_config='configs/bert_config.json', embed_dim=256, queue_size=57600, momentum=0.995)
+    model = BLIP_Ego4d(num_frames=config['num_frames'], 
+                       verb_classes=config['verb_classes'],
+                       noun_classes=config['noun_classes'], 
+                       vision_width=512, 
+                       med_config=config['med_config'])#'configs/bert_config.json')
 
     model = model.to(device)   
     
@@ -215,63 +220,72 @@ def main(args, config):
             
             train_stats = train(model, train_loader, optimizer, epoch, device, config)  
         
-        #Rinki evaluate after every 2 epochs 
-        # score_val_i2t, score_val_t2i, = evaluation(model_without_ddp, val_loader, device, config)
-        # score_test_i2t, score_test_t2i = evaluation(model_without_ddp, test_loader, device, config)
+        else:             
+            test_stats=evaluation(model, test_loader, device, config)  
+            
+            if utils.is_main_process():                
+                log_stats = {
+                            **{f'test_{k}': v for k, v in test_stats.items()},
+                            }
+                with open(os.path.join(args.output_dir, "log.txt"),"a") as f:
+                    f.write(json.dumps(log_stats) + "\n")  
+            break
+       
         if epoch%2==0:
             test_stats=evaluation(model, test_loader, device, config) 
             
     
-        if utils.is_main_process():  
-      
-            
-            print(val_result)
-                                
-            if val_result['r_mean']>best:
-                save_obj = {
-                    'model': model_without_ddp.state_dict(),
-                    'optimizer': optimizer.state_dict(),
-                    'config': config,
-                    'epoch': epoch,
-                }
-                torch.save(save_obj, os.path.join(args.output_dir, 'checkpoint_best.pth'))  
-                best = val_result['r_mean']        
-                best_epoch = epoch  
-                
-                test_result = itm_eval(score_test_i2t, score_test_t2i, test_loader.dataset.txt2img, test_loader.dataset.img2txt) 
-                print(test_result)
-            
-            if args.evaluate:                
-                log_stats = {**{f'val_{k}': v for k, v in val_result.items()},
-                             **{f'test_{k}': v for k, v in test_result.items()},                  
-                            }
-                with open(os.path.join(args.output_dir, "evaluate.txt"),"a") as f:
-                    f.write(json.dumps(log_stats) + "\n")     
-            else:
+            if utils.is_main_process():       
                 log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
-                             **{f'val_{k}': v for k, v in val_result.items()},
-                             **{f'test_{k}': v for k, v in test_result.items()},  
-                             'epoch': epoch,
-                             'best_epoch': best_epoch,
+                            **{f'test_{k}': v for k, v in test_stats.items()},
+                            'epoch': epoch,
                             }
-                with open(os.path.join(args.output_dir, "log.txt"),"a") as f:
-                    f.write(json.dumps(log_stats) + "\n")   
+                
+                
+
+                if float(test_stats['t_acc'])>best:
+                    save_obj = {
+                        'model': model_without_ddp.state_dict(),
+                        'optimizer': optimizer.state_dict(),
+                        'config': config,
+                        'epoch': epoch,
+                    }
                     
-        if args.evaluate: 
-            break
+                    print(f'New best t_acc= {test_stats['t_acc']}, 
+                            with noun acc = {test_stats['n_acc']} and verb acc = {test_stats['v_acc']} at epoch={epoch} > 
+                            previous best t_acc = {best} at epoch={best_epoch}')
+                    
+                    torch.save(save_obj, os.path.join(args.output_dir, 'checkpoint_best.pth')) 
+                    best = float(test_stats['t_acc'])
+                    best_epoch = epoch
+                        
+        else:
+            if utils.is_main_process():       
+                log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
+                            'epoch': epoch,
+                            }
 
-        dist.barrier()     
+        with open(os.path.join(args.output_dir, "log.txt"),"a") as f:
+            f.write(json.dumps(log_stats) + "\n")
+                   
+         
+        dist.barrier()   
         torch.cuda.empty_cache()
-
+    
+    if utils.is_main_process():   
+        with open(os.path.join(args.output_dir, "log.txt"),"a") as f:
+            f.write("best epoch: %d"%best_epoch)      
+            
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print('Training time {}'.format(total_time_str)) 
+        
 
     
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()   
     
-    parser.add_argument('--config', default='./configs/retrieval_flickr.yaml') # rinki path to your config
+    parser.add_argument('--config', default='./configs/retrieval_flickr.yaml') # Rinki-> path to your config
     parser.add_argument('--output_dir', default='output/Retrieval_flickr')        
     parser.add_argument('--evaluate', action='store_true')
     parser.add_argument('--device', default='cuda')

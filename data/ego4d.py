@@ -3,10 +3,12 @@ import os
 import re
 import json
 import pickle
+from data.utils import *
 
 class Ego4dDataset(Dataset):
 	def __init__(
-			self, 
+			self,
+   			mode='train', 
 			annots_path, 
 			taxonomy_path,
 			llava_captions_path, 
@@ -23,7 +25,7 @@ class Ego4dDataset(Dataset):
 			self.annots = json.load(f)['clips']
 
 		self.valid_files = self.comp_valid_files()
-		#print(self.valid_files)
+		print(f'{mode}ing dataset with {self.__len__()} video segments')	
 		
 
 	def get_seg_start_end_frame(self, seg_name):
@@ -82,7 +84,8 @@ class Ego4dDataset(Dataset):
 		frames=list(llava_caps.keys())
 		caps=[]
 		for i in frames:
-			caps.append(llava_caps[i].strip('"').strip("\n").strip("."))
+			caps.append(pre_caption(llava_caps[i],max_words=20)) #Rinki-> check what is being outputed by getitem() in demo.ipynb
+			# caps.append(llava_caps[i].strip('"').strip("\n").strip("."))
 
 		gt_verb_label, gt_noun_label = self.get_gt_caption(seg_file)
 
