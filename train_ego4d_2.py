@@ -25,21 +25,31 @@ from torch.utils.data import DataLoader
 from models.blip_retrieval import blip_retrieval
 import utils
 from utils import cosine_lr_schedule
-from data import create_dataset, create_sampler, create_loader
-from dataloader import Ego4dDataset
+#from data import create_dataset, create_sampler, create_loader
+from torch.utils.data import DataLoader, Dataset
+from data.dataloader import Ego4dDataset
+from utils import compute_acc
 
 
 def accuracy(predictions,noun_labels,verb_labels):
-    same_verb=np.where(predictions['predicted_verb_classes']==noun_labels)
-    same_noun=np.where(predictions['predicted_noun_classes']==verb_labels)
-    verb_hit=len(same_verb[0])
-    noun_hit=len(same_noun[0])
-    total_video=len(noun_labels)
-    verb_acc=verb_hit/total_video
-    noun_acc=noun_hit/total_video
 
+    noun_acc=compute_acc(predictions['predicted_noun_probab'], torch.tensor(noun_labels), reduction='mean')
+    verb_acc=compute_acc(predictions['predicted_verb_probab'], torch.tensor(verb_labels), reduction='mean')
+
+
+    #total_accuracy needs the following steps
+
+    verb_probs=predictions['predicted_verb_probab']
+    noun_probs=predictions['predicted_noun_probab']
+    predicted_noun_class = torch.argmax(noun_probs, dim=1).numpy()
+    predicted_verb_class = torch.argmax(verb_probs, dim=1).numpy()
+    same_verb=np.where(predictions['predicted_verb_label']==noun_labels)
+    same_noun=np.where(predictions['predicted_noun_label']==verb_labels)
+    total_video=len(noun_labels)
     both_hit=np.where(same_verb[0]==same_noun[0])[0]
     total_acc=len(both_hit)/total_video
+
+   
     return noun_acc,verb_acc,total_acc
 
 
@@ -84,22 +94,29 @@ def evaluation(model, data_loader_test, device, config):
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Action Reco performance:'
     print_freq = 50
+    metric_logger.meters['t_acc'] = AverageMeter()
+    metric_logger.meters['n-acc'] = AverageMeter()
+    metric_logger.meters['v_acc'] = AverageMeter()
+
 
     result = []
     
-    n_acc=0
-    v_acc=0
-    t_acc=0
     start_time = time.time()  
+
     for i,(vid_ids,caption,verb_labels,noun_labels) in enumerate(metric_logger.log_every(data_loader_test, print_freq, header)): 
         predictions, _, _ = model(caption,noun_labels,verb_labels,device,vid_feature=None)#Rinki: input to your blip_ego model#      predictions should be np array
         
         #Rinki you know the predictions dictionary , so calculated noun, verb, action accuracy 
         noun_acc,verb_acc,total_acc=accuracy(predictions,noun_labels,verb_labels)
-        n_acc=n_acc+noun_acc
-        v_acc=v_acc+verb_acc
-        t_acc=t_acc+total_acc
         
+
+        #metric_logger.meters['acc'].update(accuracy.item(), n=image0.size(0)) # taken from line 87 of train_nlvr.py
+      
+        metric_logger.meters['t_acc'].update(total_acc.item(), n=vid_ids.shape[0])
+        metric_logger.meters['n-acc'].update(noun_acc.item(), n=vid_ids.shape[0])
+        metric_logger.meters['v_acc'].update(verb_acc.item(), n=vid_ids.shape[0])
+
+    metric_logger.synchronize_between_processes()    
          
 
     if args.distributed:
@@ -111,7 +128,8 @@ def evaluation(model, data_loader_test, device, config):
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print('Evaluation time {}'.format(total_time_str)) 
 
-    return result,n_acc,v_acc,t_acc
+    print("Averaged stats:", metric_logger.global_avg()) 
+    return {k: "{:.3f}".format(meter.global_avg) for k, meter in metric_logger.meters.items()}  
 
 
   
@@ -121,9 +139,11 @@ def main(args, config):
     annots_dir_test = "/data/AmitRoyChowdhury/ego4d_data/v2/annotations/fho_lta_test.json"
     llava_captions_path = "/data/AmitRoyChowdhury/Anirudh/llava_object_responses/"
     taxonomy_path = "/data/AmitRoyChowdhury/ego4d_data/v2/annotations/fho_lta_taxonomy.json"
+    train_batch_size=2
+    test_batch_size=2
 
-    train_loader = Ego4dDataset(annots_dir_train,taxonomy_path,llava_captions_path)
-    test_loader = Ego4dDataset(annots_dir_test,taxonomy_path,llava_captions_path)
+    train_dataset = Ego4dDataset(annots_dir_train,taxonomy_path,llava_captions_path)
+    test_dataset = Ego4dDataset(annots_dir_test,taxonomy_path,llava_captions_path)
 
     utils.init_distributed_mode(args)    
     
@@ -138,23 +158,25 @@ def main(args, config):
 
     #### Dataset #### 
 
-    '''
+    
     print("Creating retrieval dataset")
-    train_dataset, val_dataset, test_dataset = create_dataset('retrieval_%s'%config['dataset'], config)  
+    #train_dataset, val_dataset, test_dataset = create_dataset('retrieval_%s'%config['dataset'], config)  
 
-    if args.distributed:
+   '''if args.distributed:
         num_tasks = utils.get_world_size()
         global_rank = utils.get_rank()            
         samplers = create_sampler([train_dataset], [True], num_tasks, global_rank) + [None, None]
     else:
-        samplers = [None, None, None]
+        samplers = [None, None, None]'''
     
-    train_loader, val_loader, test_loader = create_loader([train_dataset, val_dataset, test_dataset],samplers,
+    '''train_loader,test_loader = create_loader([train_dataset, test_dataset],samplers,
                                                           batch_size=[config['batch_size_train']]+[config['batch_size_test']]*2,
                                                           num_workers=[4,4,4],
                                                           is_trains=[True, False, False], 
-                                                          collate_fns=[None,None,None])   
-                                                          '''
+                                                          collate_fns=[None,None,None]) '''
+
+    train_loader = DataLoader(train_dataset, batch_size=train_batch_size, shuffle=shuffle)
+    test_loader = DataLoader(test_dataset, batch_size=test_batch_size, shuffle=False)
 
    
 
@@ -183,9 +205,7 @@ def main(args, config):
     print("Start training")
     start_time = time.time()    
 
-    noun_epoch_acc=[]
-    verb_epoch_acc=[]
-    total_epoch_acc=[]
+    
     for epoch in range(0, config['max_epoch']):    
         if not args.evaluate:        
             if args.distributed:
@@ -199,10 +219,8 @@ def main(args, config):
         # score_val_i2t, score_val_t2i, = evaluation(model_without_ddp, val_loader, device, config)
         # score_test_i2t, score_test_t2i = evaluation(model_without_ddp, test_loader, device, config)
         if epoch%2==0:
-            _,n_acc,v_acc,t_acc=evaluation(model, test_loader, device, config) 
-            noun_epoch_acc.append(n_acc)
-            verb_epoch_acc.append(v_acc)
-            total_epoch_acc.append(t_acc)
+            test_stats=evaluation(model, test_loader, device, config) 
+            
     
         if utils.is_main_process():  
       
@@ -251,7 +269,8 @@ def main(args, config):
 
     
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()     
+    parser = argparse.ArgumentParser()   
+    
     parser.add_argument('--config', default='./configs/retrieval_flickr.yaml') # rinki path to your config
     parser.add_argument('--output_dir', default='output/Retrieval_flickr')        
     parser.add_argument('--evaluate', action='store_true')
@@ -260,6 +279,14 @@ if __name__ == '__main__':
     parser.add_argument('--world_size', default=1, type=int, help='number of distributed processes')    
     parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
     parser.add_argument('--distributed', default=True, type=bool)
+
+    parser.add_argument('--annots_dir_train', default='/data/AmitRoyChowdhury/ego4d_data/v2/annotations/fho_lta_train.json') 
+    parser.add_argument('--annots_dir_test', default='/data/AmitRoyChowdhury/ego4d_data/v2/annotations/fho_lta_test.json') 
+    parser.add_argument('--lava_captions_path', default='/data/AmitRoyChowdhury/Anirudh/llava_object_responses/') 
+    parser.add_argument('--taxonomy_path', default='/data/AmitRoyChowdhury/ego4d_data/v2/annotations/fho_lta_taxonomy.json') 
+    parser.add_argument('--train_batch_size', default=2)
+    parser.add_argument('--test_batch_size', default=2)
+
     args = parser.parse_args()
 
     config = yaml.load(open(args.config, 'r'), Loader=yaml.Loader)
