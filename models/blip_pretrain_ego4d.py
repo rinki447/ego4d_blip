@@ -63,7 +63,7 @@ class BLIP_Ego4d(nn.Module):
         # tie_encoder_decoder_weights(self.text_encoder,self.text_decoder.bert,'','/attention')
         
         
-    def forward(self, caption, noun_labels, verb_labels,gpu_device,vid_feature=None):
+    def forward(self, caption, noun_labels, verb_labels,vid_feature=None):
         
         # image_embeds = self.visual_encoder(image) 
         # image_atts = torch.ones(image_embeds.size()[:-1],dtype=torch.long).to(image.device)        

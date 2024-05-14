@@ -70,7 +70,9 @@ def train(model, data_loader_train, optimizer, epoch, device, config):
 
     for i,(vid_id,caption,verb_labels,noun_labels) in enumerate(metric_logger.log_every(data_loader_train, print_freq, header)): 
         
-        _, loss_noun, loss_verb = model(caption, noun_labels, verb_labels,device,vid_feature=None)             
+        verb_labels = verb_labels.to(device)
+        noun_labels = noun_labels.to(device)
+        _, loss_noun, loss_verb = model(caption, noun_labels, verb_labels,vid_feature=None)             
         loss = loss_noun + loss_verb
         
         optimizer.zero_grad()
@@ -109,7 +111,10 @@ def evaluation(model, data_loader_test, device, config):
     start_time = time.time()  
 
     for i,(vid_ids,caption,verb_labels,noun_labels) in enumerate(metric_logger.log_every(data_loader_test, print_freq, header)): 
-        predictions, _, _ = model(caption,noun_labels,verb_labels,device,vid_feature=None) 
+        
+        verb_labels = verb_labels.to(device)
+        noun_labels = noun_labels.to(device)
+        predictions, _, _ = model(caption,noun_labels,verb_labels,vid_feature=None) 
         
         noun_acc,verb_acc,total_acc=accuracy(predictions,noun_labels,verb_labels)
         
