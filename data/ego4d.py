@@ -3,12 +3,11 @@ import os
 import re
 import json
 import pickle
-from data.utils import *
-
+from data.utils import pre_caption
 class Ego4dDataset(Dataset):
 	def __init__(
 			self,
-   			mode='train', 
+   			mode, 
 			annots_path, 
 			taxonomy_path,
 			llava_captions_path, 
@@ -23,6 +22,7 @@ class Ego4dDataset(Dataset):
 		
 		with open(annots_path, "r") as f:
 			self.annots = json.load(f)['clips']
+
 
 		self.valid_files = self.comp_valid_files()
 		print(f'{mode}ing dataset with {self.__len__()} video segments')	
@@ -44,7 +44,9 @@ class Ego4dDataset(Dataset):
 		llava_files = os.listdir(self.llava_captions_path)
 		#print(llava_files)
 
-		for annot in self.annots:
+		for i,annot in enumerate(self.annots):
+			if i==5:
+				break
 			clip_id = annot['clip_uid']
 			start_frame = annot['action_clip_start_frame']
 			end_frame = annot['action_clip_end_frame']

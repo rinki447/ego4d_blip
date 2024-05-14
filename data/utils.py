@@ -77,7 +77,7 @@ def save_result(result, result_dir, filename, remove_duplicate=''):
 
 
 
-from pycocotools.coco import COCO
+'''from pycocotools.coco import COCO
 from pycocoevalcap.eval import COCOEvalCap
 from torchvision.datasets.utils import download_url
 
@@ -109,4 +109,4 @@ def coco_caption_eval(coco_gt_root, results_file, split):
     for metric, score in coco_eval.eval.items():
         print(f'{metric}: {score:.3f}')
     
-    return coco_eval
+    return coco_eval'''
