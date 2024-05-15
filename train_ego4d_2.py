@@ -138,15 +138,16 @@ def evaluation(model, data_loader_test, device, config):
   
 def main(args, config):
 
-    annots_dir_train = "/data/AmitRoyChowdhury/ego4d_data/v2/annotations/fho_lta_train.json"
-    annots_dir_test = "/data/AmitRoyChowdhury/ego4d_data/v2/annotations/fho_lta_test.json"
-    llava_captions_path = "/data/AmitRoyChowdhury/Anirudh/llava_object_responses/"
-    taxonomy_path = "/data/AmitRoyChowdhury/ego4d_data/v2/annotations/fho_lta_taxonomy.json"
-    
+       
     # train_batch_size=2
     # test_batch_size=2
 
-    
+    annots_dir_train=config.annots_dir_train
+    annots_dir_test=config.annots_dir_test
+    taxonomy_path=config.taxonomy_path
+    llava_captions_path=config.llava_captions_path
+    short_annot_train_path=config.short_annot_train_path
+    short_annot_train_path=config.short_annot_test_path
 
     utils.init_distributed_mode(args)    
     
@@ -163,8 +164,12 @@ def main(args, config):
    
     
     print("Creating action reco dataset")
-    train_dataset = Ego4dDataset(mode='train',annots_dir_train,taxonomy_path,llava_captions_path) #Rinki->should put in config the annot paths
-    test_dataset = Ego4dDataset(mode='test',annots_dir_test,taxonomy_path,llava_captions_path)
+    #train_dataset = Ego4dDataset(mode='train',annots_dir_train,taxonomy_path,llava_captions_path) #Rinki->should put in config the annot paths
+    #test_dataset = Ego4dDataset(mode='test',annots_dir_test,taxonomy_path,llava_captions_path)
+
+    train_dataset = Ego4dDataset(mode='train',annots_path=annots_dir_train,taxonomy_path=taxonomy_path,llava_captions_path=llava_captions_path, short_annot_path=short_annot_train_path) 
+    test_dataset = Ego4dDataset(mode='test',annots_path=annots_dir_test,taxonomy_path=taxonomy_path,llava_captions_path=llava_captions_path, short_annot_path=short_annot_test_path) 
+
     
     #train_dataset, val_dataset, test_dataset = create_dataset('retrieval_%s'%config['dataset'], config)  
 
@@ -176,7 +181,7 @@ def main(args, config):
         samplers = [None, None, None]
     
     train_loader,test_loader = create_loader([train_dataset, test_dataset],samplers,
-                                                          batch_size=[config['batch_size_train'],config['batch_size_test']],
+                                                          batch_size=[config['train_batch_size'],config['test_batch_size']],
                                                           num_workers=[4,4],
                                                           is_trains=[True, False], 
                                                           collate_fns=[collate_fn,collate_fn]) 
@@ -301,10 +306,12 @@ if __name__ == '__main__':
 
     parser.add_argument('--annots_dir_train', default='/data/AmitRoyChowdhury/ego4d_data/v2/annotations/fho_lta_train.json') 
     parser.add_argument('--annots_dir_test', default='/data/AmitRoyChowdhury/ego4d_data/v2/annotations/fho_lta_test.json') 
+    parser.add_argument('--short_annots_dir_train', default='/data/AmitRoyChowdhury/ego4d_data/v2/annotations/fho_lta_short_train.json') 
+    parser.add_argument('--short_annots_dir_test', default='/data/AmitRoyChowdhury/ego4d_data/v2/annotations/fho_lta_short_test.json') 
     parser.add_argument('--lava_captions_path', default='/data/AmitRoyChowdhury/Anirudh/llava_object_responses/') 
     parser.add_argument('--taxonomy_path', default='/data/AmitRoyChowdhury/ego4d_data/v2/annotations/fho_lta_taxonomy.json') 
-    parser.add_argument('--train_batch_size', default=2)
-    parser.add_argument('--test_batch_size', default=2)
+    parser.add_argument('--train_batch_size', default=1)
+    parser.add_argument('--test_batch_size', default=1)
 
     args = parser.parse_args()
 
