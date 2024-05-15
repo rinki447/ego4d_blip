@@ -11,62 +11,69 @@ class Ego4dDataset(Dataset):
 			annots_path, 
 			taxonomy_path,
 			llava_captions_path, 
+			short_annot_path
 		):
-
+		self.idx=0
 		self.llava_captions_path = llava_captions_path
+		self.short_annot_path=short_annot_path
+
 		with open(taxonomy_path, "r") as f:
 			lta_taxo = json.load(f)
 		
 		self.lta_nouns = lta_taxo['nouns']
 		self.lta_verbs = lta_taxo['verbs']
 		
-		with open(annots_path, "r") as f:
-			self.annots = json.load(f)['clips']
+		
+		with open(self.short_annot_path, "r") as f:
+			self.annots = list(json.load(f).keys()) 
 
+		#with open(annots_path, "r") as f:
+			#self.annots = json.load(f)['clips']
 
-		self.valid_files = self.comp_valid_files()
-		print(f'{mode}ing dataset with {self.__len__()} video segments')	
+		self.valid_files = self.comp_valid_files() #list of segment names collected from train_annotation_path
+		print("total valid training files",len(self.valid_files))
+		
+		#print(f'{mode}ing dataset with {self.__len__()} video segments')	
 		
 
-	def get_seg_start_end_frame(self, seg_name):
+	'''def get_seg_start_end_frame(self, seg_name):
 		"""Given a segment in the format "clip_name_start_frame_XX_end_frame_YY", get the
 			start_frame= XX and end_frame=YY respectively.
 		"""
 		start_frame = re.search(r'start_frame_(\d+)', seg_name).group(1)
 		end_frame = re.search(r'end_frame_(\d+)', seg_name).group(1)
 
-		return int(start_frame), int(end_frame)
+		return int(start_frame), int(end_frame)'''
 
 	def comp_valid_files(self):
 		
 		tot_valid_files = []
 
 		llava_files = os.listdir(self.llava_captions_path)
-		#print(llava_files)
+		#print(len(llava_files))
 
 		for i,annot in enumerate(self.annots):
-			if i==5:
-				break
-			clip_id = annot['clip_uid']
+			
+			'''clip_id = annot['clip_uid']
 			start_frame = annot['action_clip_start_frame']
 			end_frame = annot['action_clip_end_frame']
 
-			seg_file = "{}_start_frame_{}_end_frame_{}.pkl".format(clip_id, start_frame, end_frame)
-
+			seg_file = "{}_start_frame_{}_end_frame_{}.pkl".format(clip_id, start_frame, end_frame)'''
+			seg_file=annot+".pkl"
 			if seg_file in llava_files:
-				tot_valid_files.append(seg_file)
+				tot_valid_files.append(annot)
 
 		return tot_valid_files
 
 	def __len__(self):
-		return len(self.valid_files)
+		return len(self.annots)
 
-	def get_gt_caption(self, seg_file):
+	'''def get_gt_caption(self, seg_file):
 		"""Given a segment in the format "clip_name_start_frame_XX_end_frame_YY", get the
 			corresponding verb_label and noun_label respectively.
 		"""
-		clip_id = seg_file.split("_st")[0]
-		start_frame, end_frame = self.get_seg_start_end_frame(seg_file)
+		#clip_id = seg_file.split("_st")[0]
+		#start_frame, end_frame = self.get_seg_start_end_frame(seg_file)
 
 		for seg_annot in self.annots:
 			seg_start_frame = seg_annot["action_clip_start_frame"]
@@ -75,23 +82,36 @@ class Ego4dDataset(Dataset):
 
 			if seg_clip_id == clip_id and seg_start_frame == start_frame and\
 				seg_end_frame == end_frame:
-				return seg_annot['verb_label'], seg_annot['noun_label']
+				return seg_annot['verb_label'], seg_annot['noun_label']'''
+		
+
+		
 
 	def __getitem__(self, idx):
-		seg_file = self.valid_files[idx]
+		
+		
+			seg_file=self.llava_captions_path + self.valid_files[idx]+".pkl"
+			print("llava file name",seg_file)
+			with open(seg_file, "rb") as f:
+				llava_caps = pickle.load(f)
 
-		with open(self.llava_captions_path + seg_file, "rb") as f:
-			llava_caps = pickle.load(f)
+			frames=list(llava_caps.keys())
+			caps=[]
+			for i in frames:
+				caps.append(pre_caption(llava_caps[i],max_words=20)) #Rinki-> check what is being outputed by getitem() in demo.ipynb
+				# caps.append(llava_caps[i].strip('"').strip("\n").strip("."))
+			with open(self.short_annot_path, "r") as f:
+				file=json.load(f)
 
-		frames=list(llava_caps.keys())
-		caps=[]
-		for i in frames:
-			caps.append(pre_caption(llava_caps[i],max_words=20)) #Rinki-> check what is being outputed by getitem() in demo.ipynb
-			# caps.append(llava_caps[i].strip('"').strip("\n").strip("."))
+			vid_name=self.valid_files[idx]
+			gt_noun_label=file[vid_name]["noun"]
+			gt_verb_label=file[vid_name]["verb"]
 
-		gt_verb_label, gt_noun_label = self.get_gt_caption(seg_file)
+			
+			return seg_file, caps, gt_verb_label, gt_noun_label
 
-		return seg_file, caps, gt_verb_label, gt_noun_label
+
+
 
 '''
 if __name__ == "__main__":
