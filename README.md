@@ -6,7 +6,9 @@ added collate fn and modified it within data/utils.py: line 78 to line 116
 
 included the collate_fn in train_ego4d_2.py: check line number 183 to 190
 
-doubt: what should be passed as argument within collate_fn in line number 183 of train_ego4d_2.py
+doubt1: what should be passed as argument within collate_fn in line number 183 of train_ego4d_2.py
+
+doubt2:line 303, should we keep action="store_true" in  parser.add_argument('--evaluate', action='store_true')
 
 
 # main file -Rinki please check
