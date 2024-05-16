@@ -179,12 +179,15 @@ def main(args, config):
         samplers = create_sampler([train_dataset, test_dataset], [True,False], num_tasks, global_rank)
     else:
         samplers = [None, None, None]
+
+    collate_fn_train=collate_fn()
+    collate_fn_test=collate_fn()
     
     train_loader,test_loader = create_loader([train_dataset, test_dataset],samplers,
                                                           batch_size=[config['train_batch_size'],config['test_batch_size']],
                                                           num_workers=[4,4],
                                                           is_trains=[True, False], 
-                                                          collate_fns=[collate_fn,collate_fn]) 
+                                                          collate_fns=[collate_fn_train,collate_fn_test]) 
 
     # train_loader = DataLoader(train_dataset, batch_size=train_batch_size, shuffle=shuffle)
     # test_loader = DataLoader(test_dataset, batch_size=test_batch_size, shuffle=False)
