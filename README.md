@@ -2,7 +2,11 @@ demo.py runs models/blip_pretrain_ego4d.py
 
 
 # main file -Sayak please check
-Updated ego4d.py for gt noun and verb label
+added collate fn and modified it within data/utils.py: line 78 to line 116
+
+included the collate_fn in train_ego4d_2.py: check line number 183 to 190
+
+doubt: what should be passed as argument within collate_fn in line number 183 of train_ego4d_2.py
 
 
 # main file -Rinki please check
