@@ -299,7 +299,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()   
     
     parser.add_argument('--config', default='./configs/ego4d.yaml') 
-    parser.add_argument('--output_dir', default='output/Retrieval_flickr')        
+    parser.add_argument('--output_dir', default='/data/AmitRoyChowdhury/Rinki/BLIP/')        
     parser.add_argument('--evaluate', action='store_true')
     parser.add_argument('--device', default='cuda')
     parser.add_argument('--seed', default=42, type=int)
