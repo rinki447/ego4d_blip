@@ -4,6 +4,7 @@ import re
 import json
 import pickle
 from data.utils import pre_caption
+import numpy as np
 class Ego4dDataset(Dataset):
 	def __init__(
 			self,
@@ -16,6 +17,7 @@ class Ego4dDataset(Dataset):
 		self.idx=0
 		self.llava_captions_path = llava_captions_path
 		self.short_annot_path=short_annot_path
+		self.taxonomy_path=taxonomy_path
 
 		with open(taxonomy_path, "r") as f:
 			lta_taxo = json.load(f)
@@ -53,7 +55,8 @@ class Ego4dDataset(Dataset):
 		#print(len(llava_files))
 
 		for i,annot in enumerate(self.annots):
-			if i == 5:
+			
+			if i==5:
 				break
     
 			seg_file=annot+".pkl"
@@ -89,7 +92,7 @@ class Ego4dDataset(Dataset):
 		
 		
 			seg_file=self.llava_captions_path + self.valid_files[idx]+".pkl"
-			print("llava file name",seg_file)
+			#print("llava file name",seg_file)
 			with open(seg_file, "rb") as f:
 				llava_caps = pickle.load(f)
 
@@ -105,8 +108,21 @@ class Ego4dDataset(Dataset):
 			gt_noun_label=file[vid_name]["noun"]
 			gt_verb_label=file[vid_name]["verb"]
 
+			noun_list=np.array(self.lta_nouns)
+			verb_list=np.array(self.lta_verbs)
+
+			#print("gt_noun",f"{gt_noun_label}")
+			#print("gt_verb",f"{gt_verb_label}")
+			#print(noun_list)
+			if f"{gt_noun_label}" in noun_list:
+				noun_label=np.where(noun_list==f"{gt_noun_label}")[0]
+			if f"{gt_verb_label}" in verb_list:
+				verb_label=np.where(verb_list==f"{gt_verb_label}")[0]
+
+			#print("labels",noun_label,verb_label)
 			
-			return seg_file, caps, gt_verb_label, gt_noun_label
+			
+			return seg_file, caps, verb_label, noun_label
 
 
 
