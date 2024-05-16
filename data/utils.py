@@ -79,23 +79,26 @@ def collate_fn(batch):
     #meta_list = []
 
     batch_size = len(batch)
+    all_vid_id=[]
+    all_captions=[]
 
     #vid_ft_dim = batch[0][0].shape[-1]
     #tag_ft_dim = batch[0][2].shape[-1]
     #max_props_num = batch[0][3]['temporal_span']
-    vid_id_dim=batch[0][0].shape[-1]
-    caption_dim=batch[0][1].shape[-1]
-    gt_verb_dim=batch[0][2].shape[-1]
-    gt_noun_dim=batch[0][3].shape[-1]
+
+    #vid_id_dim=batch[0][0].shape[-1]
+    #caption_dim=len(batch[0][1])
+    
    
     #vid_fts = torch.zeros(batch_size, max_props_num, vid_ft_dim)
     #tag_fts = torch.zeros(batch_size, max_props_num, tag_ft_dim)
     #masks = torch.zeros(batch_size, max_props_num)
     #sampled_frames_logical = torch.zeros(batch_size, max_props_num, vid_ft_dim)
-    vid_id = torch.zeros(batch_size, vid_id_dim)
-    caption = torch.zeros(batch_size, caption_dim)
-    gt_verb = torch.zeros(batch_size, gt_verb_dim)
-    gt_noun = torch.zeros(batch_size, gt_noun_dim)
+
+    #vid_id = torch.zeros(batch_size, vid_id_dim)
+    #caption = torch.zeros(batch_size, caption_dim)
+    all_gt_verb = torch.zeros(batch_size)
+    all_gt_noun = torch.zeros(batch_size)
 
     for i, sample in enumerate(batch):
         #vid_fts[i, :sample[0].shape[0], :] = sample[0]
@@ -104,16 +107,19 @@ def collate_fn(batch):
         #sampled_frames_logical[i, :sample[2].shape[0],:] = 1
 
 
-        vid_id[i, :sample[0].shape[0]] = sample[0]
-        caption[i, :sample[1].shape[0]] = sample[1]
-        gt_verb[i, :sample[2].shape[0]] = sample[2]
-        gt_noun[i, :sample[2].shape[0]] = sample[3]
+        #vid_id[i, :sample[0].shape[0]] = sample[0]
+        all_vid_id.extend(sample[0])
+        all_captions.extend(sample[1])
+        all_gt_verb[i]=sample[2]
+        all_gt_noun[i]=sample[3]
+
+        
 
         #meta_list.append(sample[3])
    
     # masks = masks.to(torch.bool)
     #return vid_fts, masks, tag_fts, sampled_frames_logical, meta_list
-    return vid_id, caption, gt_verb, gt_noun
+    return all_vid_id, all_captions, all_gt_verb, all_gt_noun
 
 
 

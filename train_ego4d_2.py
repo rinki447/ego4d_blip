@@ -142,12 +142,12 @@ def main(args, config):
     # train_batch_size=2
     # test_batch_size=2
 
-    annots_dir_train=config.annots_dir_train
-    annots_dir_test=config.annots_dir_test
-    taxonomy_path=config.taxonomy_path
-    llava_captions_path=config.llava_captions_path
-    short_annot_train_path=config.short_annot_train_path
-    short_annot_train_path=config.short_annot_test_path
+    annots_dir_train=config["annots_dir_train"]
+    annots_dir_test=config["annots_dir_test"]
+    taxonomy_path=config["taxonomy_path"]
+    llava_captions_path=config["llava_captions_path"]
+    short_annot_train_path=config["short_annot_train_path"]
+    short_annot_train_path=config["short_annot_test_path"]
 
     utils.init_distributed_mode(args)    
     
@@ -204,7 +204,10 @@ def main(args, config):
                        verb_classes=config['verb_classes'],
                        noun_classes=config['noun_classes'], 
                        vision_width=512, 
-                       med_config=config['med_config'])#'configs/bert_config.json')
+                       med_config=config['med_config'],
+                       embed_dim = 256,     
+                       queue_size = 57600,
+                       momentum = 0.995)#'configs/bert_config.json')
 
     model = model.to(device)   
     
@@ -264,9 +267,9 @@ def main(args, config):
                         'epoch': epoch,
                     }
                     
-                    print(f'New best t_acc= {test_stats['t_acc']}, 
-                            with noun acc = {test_stats['n_acc']} and verb acc = {test_stats['v_acc']} at epoch={epoch} > 
-                            previous best t_acc = {best} at epoch={best_epoch}')
+                    print(f'New best t_acc= {test_stats['t_acc']}', 
+                            f'with noun acc = {test_stats['n_acc']} and verb acc = {test_stats['v_acc']} at epoch={epoch} > ',
+                            f'previous best t_acc = {best} at epoch={best_epoch}')
                     
                     torch.save(save_obj, os.path.join(args.output_dir, 'checkpoint_best.pth')) 
                     best = float(test_stats['t_acc'])
@@ -307,14 +310,14 @@ if __name__ == '__main__':
     parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
     parser.add_argument('--distributed', default=True, type=bool)
 
-    parser.add_argument('--annots_dir_train', default='/data/AmitRoyChowdhury/ego4d_data/v2/annotations/fho_lta_train.json') 
-    parser.add_argument('--annots_dir_test', default='/data/AmitRoyChowdhury/ego4d_data/v2/annotations/fho_lta_test.json') 
-    parser.add_argument('--short_annots_dir_train', default='/data/AmitRoyChowdhury/ego4d_data/v2/annotations/fho_lta_short_train.json') 
-    parser.add_argument('--short_annots_dir_test', default='/data/AmitRoyChowdhury/ego4d_data/v2/annotations/fho_lta_short_test.json') 
-    parser.add_argument('--lava_captions_path', default='/data/AmitRoyChowdhury/Anirudh/llava_object_responses/') 
-    parser.add_argument('--taxonomy_path', default='/data/AmitRoyChowdhury/ego4d_data/v2/annotations/fho_lta_taxonomy.json') 
-    parser.add_argument('--train_batch_size', default=1)
-    parser.add_argument('--test_batch_size', default=1)
+    #parser.add_argument('--annots_dir_train', default='/data/AmitRoyChowdhury/ego4d_data/v2/annotations/fho_lta_train.json') 
+    #parser.add_argument('--annots_dir_test', default='/data/AmitRoyChowdhury/ego4d_data/v2/annotations/fho_lta_test.json') 
+    #parser.add_argument('--short_annots_dir_train', default='/data/AmitRoyChowdhury/ego4d_data/v2/annotations/fho_lta_short_train.json') 
+    #parser.add_argument('--short_annots_dir_test', default='/data/AmitRoyChowdhury/ego4d_data/v2/annotations/fho_lta_short_test.json') 
+    #parser.add_argument('--lava_captions_path', default='/data/AmitRoyChowdhury/Anirudh/llava_object_responses/') 
+    #parser.add_argument('--taxonomy_path', default='/data/AmitRoyChowdhury/ego4d_data/v2/annotations/fho_lta_taxonomy.json') 
+    #parser.add_argument('--train_batch_size', default=1)
+    #parser.add_argument('--test_batch_size', default=1)
 
     args = parser.parse_args()
 
