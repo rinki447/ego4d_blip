@@ -53,15 +53,13 @@ class Ego4dDataset(Dataset):
 		#print(len(llava_files))
 
 		for i,annot in enumerate(self.annots):
-			
-			'''clip_id = annot['clip_uid']
-			start_frame = annot['action_clip_start_frame']
-			end_frame = annot['action_clip_end_frame']
-
-			seg_file = "{}_start_frame_{}_end_frame_{}.pkl".format(clip_id, start_frame, end_frame)'''
+			if i == 5:
+				break
+    
 			seg_file=annot+".pkl"
 			if seg_file in llava_files:
 				tot_valid_files.append(annot)
+
 
 		return tot_valid_files
 
