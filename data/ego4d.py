@@ -115,9 +115,9 @@ class Ego4dDataset(Dataset):
 			#print("gt_verb",f"{gt_verb_label}")
 			#print(noun_list)
 			if f"{gt_noun_label}" in noun_list:
-				noun_label=np.where(noun_list==f"{gt_noun_label}")[0]
+				noun_label=np.where(noun_list==f"{gt_noun_label}")[0]+1
 			if f"{gt_verb_label}" in verb_list:
-				verb_label=np.where(verb_list==f"{gt_verb_label}")[0]
+				verb_label=np.where(verb_list==f"{gt_verb_label}")[0]+1
 
 			#print("labels",noun_label,verb_label)
 			
