@@ -8,8 +8,8 @@ included the collate_fn in train_ego4d_2.py: check line number 183 to 190
 
 doubt1: what should be passed as argument within collate_fn in line number 183 of train_ego4d_2.py
 
-doubt2:line 303, should we keep action="store_true" in  parser.add_argument('--evaluate', action='store_true')
-if it is not true then only line 228 will b executed (ie training loop will start)
+doubt2:line 303, should we keep action="store_true" in  parser.add_argument('--evaluate', action='store_true'),
+because if it is "not true" then only line 228 will b executed (ie training loop will start)
 
 
 # main file -Rinki please check
