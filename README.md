@@ -2,7 +2,7 @@ demo.py runs models/blip_pretrain_ego4d.py
 
 
 # main file -Sayak please check
-Updated config file config/retrieval_flickr_ego4d.yaml by deleting unneccessary parameters, added some paths to the config inside train_ego4d_2.py  in line 307 to 314
+Updated ego4d.py for gt noun and verb label
 
 
 # main file -Rinki please check
