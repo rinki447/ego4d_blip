@@ -4,19 +4,19 @@ init_lr: 1e-5
 # optimizer
 weight_decay: 0.05
 min_lr: 0
-max_epoch: 10
+max_epoch: 4
 num_frames: 16
 
 verb_classes: 117
 noun_classes: 521
-train_batch_size: 32
-test_batch_size: 32
+train_batch_size: 16
+test_batch_size: 16
 
 annots_dir_train: '/data/AmitRoyChowdhury/ego4d_data/v2/annotations/fho_lta_train.json'
 annots_dir_test: '/data/AmitRoyChowdhury/ego4d_data/v2/annotations/fho_lta_test.json'
-short_annots_dir_train: '/data/AmitRoyChowdhury/ego4d_data/v2/annotations/fho_lta_short_train.json'
-short_annots_dir_test: '/data/AmitRoyChowdhury/ego4d_data/v2/annotations/fho_lta_short_test.json'
-lava_captions_path: '/data/AmitRoyChowdhury/Anirudh/llava_object_responses/'
+short_annot_train_path: '/data/AmitRoyChowdhury/ego4d_data/v2/annotations/fho_lta_train_short.json'
+short_annot_test_path: '/data/AmitRoyChowdhury/ego4d_data/v2/annotations/fho_lta_val_short.json'
+llava_captions_path: '/data/AmitRoyChowdhury/Anirudh/llava_object_responses/'
 taxonomy_path: '/data/AmitRoyChowdhury/ego4d_data/v2/annotations/fho_lta_taxonomy.json'
 
 med_config: 'configs/bert_config.json'

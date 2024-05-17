@@ -1,3 +1,4 @@
+import torch
 from torch.utils.data import Dataset
 import os
 import re
@@ -67,7 +68,7 @@ class Ego4dDataset(Dataset):
 		return tot_valid_files
 
 	def __len__(self):
-		return len(self.annots)
+		return len(self.valid_files)
 
 	'''def get_gt_caption(self, seg_file):
 		"""Given a segment in the format "clip_name_start_frame_XX_end_frame_YY", get the
@@ -115,9 +116,9 @@ class Ego4dDataset(Dataset):
 			#print("gt_verb",f"{gt_verb_label}")
 			#print(noun_list)
 			if f"{gt_noun_label}" in noun_list:
-				noun_label=torch.LongTensor(np.where(noun_list==f"{gt_noun_label}")[0]+1)
+				noun_label=torch.LongTensor(np.where(noun_list==f"{gt_noun_label}")[0])
 			if f"{gt_verb_label}" in verb_list:
-				verb_label=torch.LongTensor(np.where(verb_list==f"{gt_verb_label}")[0]+1)
+				verb_label=torch.LongTensor(np.where(verb_list==f"{gt_verb_label}")[0])
 
 			#print("labels",noun_label,verb_label)
 			

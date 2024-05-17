@@ -34,21 +34,31 @@ from utils import compute_acc
 
 def accuracy(predictions,noun_labels,verb_labels):
 
-    noun_acc=compute_acc(predictions['predicted_noun_probab'], torch.tensor(noun_labels), reduction='mean')
-    verb_acc=compute_acc(predictions['predicted_verb_probab'], torch.tensor(verb_labels), reduction='mean')
+    noun_acc=torch.tensor(compute_acc(predictions['predicted_noun_probab'], torch.tensor(noun_labels), reduction='mean'))
+    verb_acc=torch.tensor(compute_acc(predictions['predicted_verb_probab'], torch.tensor(verb_labels), reduction='mean'))
 
 
     #total_accuracy needs the following steps
 
     verb_probs=predictions['predicted_verb_probab']
     noun_probs=predictions['predicted_noun_probab']
-    predicted_noun_class = torch.argmax(noun_probs, dim=1).numpy()
-    predicted_verb_class = torch.argmax(verb_probs, dim=1).numpy()
-    same_verb=np.where(predictions['predicted_verb_label']==noun_labels)
-    same_noun=np.where(predictions['predicted_noun_label']==verb_labels)
+    predicted_noun_class = torch.argmax(noun_probs, dim=1)
+    predicted_verb_class = torch.argmax(verb_probs, dim=1)
+
+    same_elements_n = torch.eq(predicted_noun_class, noun_labels)
+    same_noun = torch.nonzero(same_elements_n).squeeze()
+
+    same_elements_v = torch.eq(predicted_verb_class, verb_labels)
+    same_verb = torch.nonzero(same_elements_v).squeeze()
+
     total_video=len(noun_labels)
-    both_hit=np.where(same_verb[0]==same_noun[0])[0]
-    total_acc=len(both_hit)/total_video
+
+    set1 = set(same_noun.tolist())
+    set2 = set(same_verb.tolist())
+    common_elements = set1.intersection(set2)
+    both_hit= torch.tensor(list(common_elements))
+
+    total_acc=torch.tensor(len(both_hit)/total_video)
 
    
     return noun_acc,verb_acc,total_acc
@@ -72,7 +82,8 @@ def train(model, data_loader_train, optimizer, epoch, device, config):
         
         verb_labels = verb_labels.to(device)
         noun_labels = noun_labels.to(device)
-        _, loss_noun, loss_verb = model(caption, noun_labels, verb_labels,vid_feature=None)             
+        
+        _, loss_noun, loss_verb = model(caption, noun_labels, verb_labels,device,vid_feature=None)             
         loss = loss_noun + loss_verb
         
         optimizer.zero_grad()
@@ -114,16 +125,17 @@ def evaluation(model, data_loader_test, device, config):
         
         verb_labels = verb_labels.to(device)
         noun_labels = noun_labels.to(device)
-        predictions, _, _ = model(caption,noun_labels,verb_labels,vid_feature=None) 
+        
+        predictions, _, _ = model(caption,noun_labels,verb_labels,device,vid_feature=None) 
         
         noun_acc,verb_acc,total_acc=accuracy(predictions,noun_labels,verb_labels)
         
 
         #metric_logger.meters['acc'].update(accuracy.item(), n=image0.size(0)) # taken from line 87 of train_nlvr.py
       
-        metric_logger.meters['t_acc'].update(total_acc.item(), n=vid_ids.shape[0])
-        metric_logger.meters['n_acc'].update(noun_acc.item(), n=vid_ids.shape[0])
-        metric_logger.meters['v_acc'].update(verb_acc.item(), n=vid_ids.shape[0])
+        metric_logger.meters['t_acc'].update(total_acc.item(), n=len(vid_ids))
+        metric_logger.meters['n_acc'].update(noun_acc.item(), n=len(vid_ids))
+        metric_logger.meters['v_acc'].update(verb_acc.item(), n=len(vid_ids))
 
     metric_logger.synchronize_between_processes()           
         
@@ -147,11 +159,12 @@ def main(args, config):
     taxonomy_path=config["taxonomy_path"]
     llava_captions_path=config["llava_captions_path"]
     short_annot_train_path=config["short_annot_train_path"]
-    short_annot_train_path=config["short_annot_test_path"]
+    short_annot_test_path=config["short_annot_test_path"]
 
     utils.init_distributed_mode(args)    
     
     device = torch.device(args.device)
+
 
     # fix the seed for reproducibility
     seed = args.seed + utils.get_rank()
@@ -180,14 +193,14 @@ def main(args, config):
     else:
         samplers = [None, None, None]
 
-    collate_fn_train=collate_fn()
-    collate_fn_test=collate_fn()
+    #collate_fn_train=collate_fn()
+    #collate_fn_test=collate_fn()
     
     train_loader,test_loader = create_loader([train_dataset, test_dataset],samplers,
                                                           batch_size=[config['train_batch_size'],config['test_batch_size']],
                                                           num_workers=[4,4],
                                                           is_trains=[True, False], 
-                                                          collate_fns=[collate_fn_train,collate_fn_test]) 
+                                                          collate_fns=[collate_fn,collate_fn]) 
 
     # train_loader = DataLoader(train_dataset, batch_size=train_batch_size, shuffle=shuffle)
     # test_loader = DataLoader(test_dataset, batch_size=test_batch_size, shuffle=False)
@@ -200,22 +213,14 @@ def main(args, config):
                              #vit_grad_ckpt=config['vit_grad_ckpt'], vit_ckpt_layer=config['vit_ckpt_layer'], 
                              #queue_size=config['queue_size'], negative_all_rank=config['negative_all_rank'])
 
-    model = BLIP_Ego4d(num_frames=config['num_frames'], 
-                       verb_classes=config['verb_classes'],
-                       noun_classes=config['noun_classes'], 
-                       vision_width=512, 
-                       med_config=config['med_config'],
-                       embed_dim = 256,     
-                       queue_size = 57600,
-                       momentum = 0.995)#'configs/bert_config.json')
-
+    model = BLIP_Ego4d(num_frames=config['num_frames'],verb_classes=config['verb_classes'],noun_classes=config['noun_classes'], vision_width=512, med_config=config['med_config'])
     model = model.to(device)   
     
     model_without_ddp = model
 
 
     if args.distributed:
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
+        model = torch.nn.parallel.DistributedDataParallel(model,find_unused_parameters=True, device_ids=[args.gpu])
         model_without_ddp = model.module   
 
     optimizer = torch.optim.AdamW(params=model.parameters(), lr=config['init_lr'], weight_decay=config['weight_decay']) 
@@ -227,7 +232,8 @@ def main(args, config):
     start_time = time.time()    
 
     
-    for epoch in range(0, config['max_epoch']):    
+    for epoch in range(0, config['max_epoch']):   
+        log_stats={} 
         if not args.evaluate:        
             if args.distributed:
                 train_loader.sampler.set_epoch(epoch)
@@ -267,9 +273,9 @@ def main(args, config):
                         'epoch': epoch,
                     }
                     
-                    print(f'New best t_acc= {test_stats['t_acc']}', 
-                            f'with noun acc = {test_stats['n_acc']} and verb acc = {test_stats['v_acc']} at epoch={epoch} > ',
-                            f'previous best t_acc = {best} at epoch={best_epoch}')
+                    print(f"New best t_acc= {test_stats['t_acc']}", 
+                            f"with noun acc = {test_stats['n_acc']} and verb acc = {test_stats['v_acc']} at epoch={epoch} > ",
+                            f"previous best t_acc = {best} at epoch={best_epoch}")
                     
                     torch.save(save_obj, os.path.join(args.output_dir, 'checkpoint_best.pth')) 
                     best = float(test_stats['t_acc'])
@@ -308,7 +314,7 @@ if __name__ == '__main__':
     parser.add_argument('--seed', default=42, type=int)
     parser.add_argument('--world_size', default=1, type=int, help='number of distributed processes')    
     parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
-    parser.add_argument('--distributed', default=True, type=bool)
+    parser.add_argument('--distributed', action='store_true')
 
     #parser.add_argument('--annots_dir_train', default='/data/AmitRoyChowdhury/ego4d_data/v2/annotations/fho_lta_train.json') 
     #parser.add_argument('--annots_dir_test', default='/data/AmitRoyChowdhury/ego4d_data/v2/annotations/fho_lta_test.json') 

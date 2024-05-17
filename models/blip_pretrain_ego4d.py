@@ -17,16 +17,9 @@ import torch.nn.functional as F
 from models.blip_ego import init_tokenizer, load_checkpoint
 
 class BLIP_Ego4d(nn.Module):
-    def __init__(self,     
-                 num_frames,
-                 verb_classes,
-                 noun_classes,  
-                 vision_width = 512,             
-                 med_config = 'configs/bert_config.json',                 
-                 embed_dim = 256,     
-                 queue_size = 57600,
-                 momentum = 0.995
-                 ):
+    def __init__(self,num_frames,verb_classes,noun_classes,vision_width = 512,med_config = 'configs/bert_config.json'):                
+                 
+                 
         """
         Args:
             med_config (str): path for the mixture of encoder-decoder model's configuration file
@@ -63,14 +56,14 @@ class BLIP_Ego4d(nn.Module):
         # tie_encoder_decoder_weights(self.text_encoder,self.text_decoder.bert,'','/attention')
         
         
-    def forward(self, caption, noun_labels, verb_labels,vid_feature=None):
+    def forward(self, caption, noun_labels, verb_labels,device,vid_feature=None):
         
         # image_embeds = self.visual_encoder(image) 
         # image_atts = torch.ones(image_embeds.size()[:-1],dtype=torch.long).to(image.device)        
         # image_feat = F.normalize(self.vision_proj(image_embeds[:,0,:]),dim=-1)          
         
         text = self.tokenizer(caption, padding='max_length', truncation=True, max_length=30, 
-                              return_tensors="pt") #.to(gpu_device)  
+                              return_tensors="pt").to(device)  
         text_output = self.text_encoder(text.input_ids, attention_mask = text.attention_mask,                      
                                         return_dict = True, mode = 'text')            
         text_feat = text_output.last_hidden_state[:,0,:] # bs*num_frames x 768
@@ -87,10 +80,12 @@ class BLIP_Ego4d(nn.Module):
         
         #Rinki########################################## check shape
         
-        noun_cls_logits = self.noun_head(text_feat_pooled)   
-        verb_cls_logits = self.verb_head(text_feat_pooled)           
+        noun_cls_logits = self.noun_head(text_feat_pooled).to(torch.float32)   
+        verb_cls_logits = self.verb_head(text_feat_pooled).to(torch.float32)         
 
-       
+        noun_labels=noun_labels.to(torch.int64)
+        verb_labels=verb_labels.to(torch.int64)
+        
         loss_noun = F.cross_entropy(noun_cls_logits, noun_labels)  
         loss_verb = F.cross_entropy(verb_cls_logits, verb_labels)  
 
