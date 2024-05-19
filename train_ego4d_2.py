@@ -223,7 +223,7 @@ def main(args, config):
         model = torch.nn.parallel.DistributedDataParallel(model,find_unused_parameters=True, device_ids=[args.gpu])
         model_without_ddp = model.module   
 
-    optimizer = torch.optim.AdamW(params=model.parameters(), lr=config['init_lr'], weight_decay=config['weight_decay']) 
+    optimizer = torch.optim.AdamW(params=model_without_ddp, lr=config['init_lr'], weight_decay=config['weight_decay']) 
     
     best = 0
     best_epoch = 0
