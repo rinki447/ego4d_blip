@@ -100,7 +100,7 @@ class Ego4dDataset(Dataset):
 			frames=list(llava_caps.keys())
 			caps=[]
 			for i in frames:
-				caps.append(pre_caption(llava_caps[i],max_words=20)) #Rinki-> check what is being outputed by getitem() in demo.ipynb
+				caps.append(pre_caption(llava_caps[i],max_words=30))
 				# caps.append(llava_caps[i].strip('"').strip("\n").strip("."))
 			with open(self.short_annot_path, "r") as f:
 				file=json.load(f)
