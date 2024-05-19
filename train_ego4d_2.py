@@ -282,7 +282,8 @@ def main(args, config):
                     best_epoch = epoch
                         
         else:
-            if utils.is_main_process():       
+            if utils.is_main_process():  
+                print("entered loop")     
                 log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
                             'epoch': epoch,
                             }
