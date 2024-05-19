@@ -233,7 +233,7 @@ def main(args, config):
 
     
     for epoch in range(0, config['max_epoch']):   
-        log_stats={} 
+        log_stats={}
         if not args.evaluate:        
             if args.distributed:
                 train_loader.sampler.set_epoch(epoch)

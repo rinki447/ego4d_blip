@@ -57,8 +57,8 @@ class Ego4dDataset(Dataset):
 
 		for i,annot in enumerate(self.annots):
 			
-			if i==50:#for debugging
-				break
+			'''if i==50:#for debugging
+				break'''
     
 			seg_file=annot+".pkl"
 			if seg_file in llava_files:
