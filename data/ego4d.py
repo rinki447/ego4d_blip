@@ -57,7 +57,7 @@ class Ego4dDataset(Dataset):
 
 		for i,annot in enumerate(self.annots):
 			
-			'''if i==50:#for debugging
+			'''if i==5000:#for debugging
 				break'''
     
 			seg_file=annot+".pkl"

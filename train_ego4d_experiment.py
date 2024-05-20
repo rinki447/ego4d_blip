@@ -53,44 +53,12 @@ def accuracy(predictions,noun_labels,verb_labels):
 
     total_video=len(noun_labels)
 
+    set1 = set(same_noun.tolist())
+    set2 = set(same_verb.tolist())
+    common_elements = set1.intersection(set2)
+    both_hit= torch.tensor(list(common_elements))
 
-    if same_noun.ndimension() == 0:
-        size_n = 0
-    else:
-        size_n = len(same_noun)
-
-    if same_verb.ndimension() == 0:
-        size_v = 0
-    else:
-        size_v = len(same_verb)
-
-    
-    both=[]
-
-    if size_n==0 or size_v==0:
-        both_hit=0
-    elif size_n==1 and size_v>1:
-        if same_noun.item() in same_verb:
-            both_hit=1
-        else:
-            both_hit=0
-    elif size_v==1 and size_n>1:
-        if same_verb.item() in same_noun:
-            both_hit=1
-        else:
-            both_hit=0
-    elif size_n==1 and size_v==1:
-        if same__noun.item()==same_verb.item():
-            both_hit=1
-        else:
-            both_hit=0
-    else:
-        for element in same_noun:
-            if element in same_verb:
-                both.append(element)
-        both_hit=len(both)
-
-    total_acc=torch.tensor((both_hit)/total_video)
+    total_acc=torch.tensor(len(both_hit)/total_video)
 
    
     return noun_acc,verb_acc,total_acc
@@ -264,40 +232,42 @@ def main(args, config):
     start_time = time.time()    
 
     
-    for epoch in range(0, config['max_epoch']):   
-        log_stats={}
-        if not args.evaluate:        
+
+    best = 0.0
+    best_epoch = 0
+
+    for epoch in range(0, config['max_epoch']):
+        if not args.evaluate:
             if args.distributed:
                 train_loader.sampler.set_epoch(epoch)
                 
             cosine_lr_schedule(optimizer, epoch, config['max_epoch'], config['init_lr'], config['min_lr'])
             
-            train_stats = train(model, train_loader, optimizer, epoch, device, config)  
-        
-        else:             
-            test_stats=evaluation(model, test_loader, device, config)  
+            train_stats = train(model, train_loader, optimizer, epoch, device, config)
             
-            if utils.is_main_process():                
-                log_stats = {
-                            **{f'test_{k}': v for k, v in test_stats.items()},
-                            }
-                with open(os.path.join(args.output_dir, "log.txt"),"a") as f:
-                    f.write(json.dumps(log_stats) + "\n")  
+            if epoch % 2 == 0:
+                test_stats = evaluation(model, test_loader, device, config)
+            else:
+                test_stats = {}
+                
+        else:
+            test_stats = evaluation(model, test_loader, device, config)
+            if utils.is_main_process():
+                log_stats = {f'test_{k}': v for k, v in test_stats.items()}
+                with open(os.path.join(args.output_dir, "log.txt"), "a") as f:
+                    f.write(json.dumps(log_stats) + "\n")
             break
-       
-        if epoch%2==0:
-            test_stats=evaluation(model, test_loader, device, config) 
-            
-    
-            if utils.is_main_process():       
-                log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
-                            **{f'test_{k}': v for k, v in test_stats.items()},
-                            'epoch': epoch,
-                            }
-                
-                
 
-                if float(test_stats['t_acc'])>best:
+        if not args.evaluate:
+            if utils.is_main_process():
+                log_stats = {f'train_{k}': v for k, v in train_stats.items(), 'epoch': epoch}
+                if epoch % 2 == 0:
+                    log_stats.update({f'test_{k}': v for k, v in test_stats.items()})
+                
+                with open(os.path.join(args.output_dir, "log.txt"), "a") as f:
+                    f.write(json.dumps(log_stats) + "\n")
+
+                if 't_acc' in test_stats and float(test_stats['t_acc']) > best:
                     save_obj = {
                         'model': model_without_ddp.state_dict(),
                         'optimizer': optimizer.state_dict(),
@@ -305,27 +275,16 @@ def main(args, config):
                         'epoch': epoch,
                     }
                     
-                    print(f"New best t_acc= {test_stats['t_acc']}", 
-                            f"with noun acc = {test_stats['n_acc']} and verb acc = {test_stats['v_acc']} at epoch={epoch} > ",
-                            f"previous best t_acc = {best} at epoch={best_epoch}")
+                    print(
+                        f"New best t_acc= {test_stats['t_acc']}", 
+                        f"with noun acc = {test_stats['n_acc']} and verb acc = {test_stats['v_acc']} at epoch={epoch} > ",
+                        f"previous best t_acc = {best} at epoch={best_epoch}"
+                    )
                     
-                    torch.save(save_obj, os.path.join(args.output_dir, 'checkpoint_best.pth')) 
+                    torch.save(save_obj, os.path.join(args.output_dir, 'checkpoint_best.pth'))
                     best = float(test_stats['t_acc'])
                     best_epoch = epoch
-                        
-        else:
-            if utils.is_main_process():  
-                print("entered loop")     
-                log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
-                            'epoch': epoch,
-                            }
 
-        with open(os.path.join(args.output_dir, "log.txt"),"a") as f:
-            f.write(json.dumps(log_stats) + "\n")
-                   
-         
-        dist.barrier()   
-        torch.cuda.empty_cache()
     
     if utils.is_main_process():   
         with open(os.path.join(args.output_dir, "log.txt"),"a") as f:
